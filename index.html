@@ -169,7 +169,8 @@ function ov(){
  var fxCol=dec.indexOf('TRANSFER')>=0?'var(--g)':(dec==='STAGE'?'var(--y)':'var(--tm)');
  var nb=(DATA.upcoming||[]).find(function(u){return u.usd<0;});
  var h='<div class="hero">';
- h+=feat('Free to spend this month',money(fm),'discretionary left across your flexible budgets',fcol);
+ var dcar=(DATA.disc||{}).carry||0;
+ h+=feat('Free to spend this month',money(fm),'discretionary left'+(dcar?' · incl '+money(dcar)+' carried from last month':' across flexible budgets'),fcol);
  h+='<div class="stats">';
  h+=stat('Real net position',money(net),'cash + owed − debts',net>=0?'var(--g)':'var(--r)');
  h+=stat('Bangkok Bank (฿)',fmtTHB(H.bkk_thb||0),(head>=0?fmtTHB(head)+' over ฿400k floor':'BELOW visa floor!'),head>=0?'var(--tp)':'var(--r)');
@@ -195,32 +196,40 @@ function ov(){
 /* ================= BUDGET ================= */
 function setPer(p){per=p;render();}
 function budg(){
- var flex=DATA.budget.filter(function(c){return c.type==='flex'&&!c.essential;});
- var flexBud=flex.reduce(function(s,c){return s+c.mo;},0), flexSpent=flex.reduce(function(s,c){return s+(c.mo_spent||0);},0);
- var fixed=DATA.budget.filter(function(c){return c.type==='fixed';}).reduce(function(s,c){return s+c.mo;},0);
- var save=DATA.budget.filter(function(c){return c.type==='save';}).reduce(function(s,c){return s+c.mo;},0);
- var over=flex.filter(function(c){return (c.mo_spent||0)>c.mo;}).sort(function(a,b){return (b.mo_spent-b.mo)-(a.mo_spent-a.mo);})[0];
- var left=Math.max(0,flexBud-flexSpent), lcol=left<=0?'var(--r)':(left<60?'var(--y)':'var(--g)');
+ var B=DATA.budget||[], D=DATA.disc||{}, monEl=new Date().getMonth()+1;
+ var flow=B.filter(function(c){return c.type==='flow';});
+ var over=flow.filter(function(c){return (c.mo_spent||0)>(c.avail||c.mo);}).sort(function(a,b){return (b.mo_spent-(b.avail||b.mo))-(a.mo_spent-(a.avail||a.mo));})[0];
+ var left=(D.left!=null)?D.left:flow.reduce(function(s,c){return s+Math.max(0,(c.avail||c.mo)-(c.mo_spent||0));},0);
+ var lcol=left<=0?'var(--r)':(left<100?'var(--y)':'var(--g)');
+ var fixedTot=B.filter(function(c){return c.type==='fixed';}).reduce(function(s,c){return s+c.mo;},0);
+ var allocTot=B.filter(function(c){return c.type==='alloc';}).reduce(function(s,c){return s+c.mo;},0);
+ var sinkTot=B.filter(function(c){return c.type==='sink';}).reduce(function(s,c){return s+c.mo;},0);
  var h='<div class="hero">';
- h+=feat('Discretionary left this month',money(left),money(flexSpent)+' spent of '+money(flexBud)+' flexible',lcol);
+ h+=feat('Discretionary left this month',money(left),
+    money(D.budget||0)+' budget'+(D.carry?' + '+money(D.carry)+' carried in':'')+(D.spent?' − '+money(D.spent)+' spent':''),lcol);
  h+='<div class="stats">';
- h+=stat('Biggest overage',over?('−'+money(over.mo_spent-over.mo)):'none',over?over.name:'all flex on track',over?'var(--r)':'var(--g)');
- h+=stat('Fixed bills',money(fixed),'cars, phone, internet','var(--tp)');
- h+=stat('Saving set aside',money(save),'taxes, travel, insurance','var(--tp)');
- h+=stat('Punnada allowance',money((DATA.budget.find(function(c){return c.type==='her';})||{}).mo||0),'monthly','var(--tp)');
+ h+=stat('Biggest overage',over?('−'+money((over.mo_spent||0)-(over.avail||over.mo))):'none',over?over.name:'all on track',over?'var(--r)':'var(--g)');
+ h+=stat('Fixed bills',money(fixedTot),'cars, utilities, phone','var(--tp)');
+ h+=stat('To Punnada / family',money(allocTot),'transfer + benevolence','var(--tp)');
+ h+=stat('Reserves set aside',money(sinkTot),'taxes, travel, insurance','var(--tp)');
  h+='</div></div>';
+ var ps=DATA.punnada_split;
+ if(ps){h+='<div class="card" style="border-color:var(--purple);margin-bottom:.6rem"><div style="font-weight:700;color:var(--purple)">Monthly transfer to Punnada · '+fmtTHB(ps.transfer_thb)+'</div>';
+  var cu=ps.components_usd||{};Object.keys(cu).forEach(function(k){h+='<div class="row" style="padding:5px 0;border-bottom:1px solid var(--line)"><span class="note">'+k+'</span><span class="amt">'+money(cu[k])+'</span></div>';});
+  h+='<div class="note" style="margin-top:5px">split '+(ps.mode==='memo'?'auto-read from the bank memo':'by plan')+' · '+ps.date+'</div></div>';}
  h+='<div class="seg" style="margin-bottom:.8rem;"><button class="'+(per==='month'?'on':'')+'" style="flex:1;padding:9px" onclick="setPer(\'month\')">THIS MONTH</button><button class="'+(per==='year'?'on':'')+'" style="flex:1;padding:9px" onclick="setPer(\'year\')">WHOLE YEAR</button></div>';
  h+='<div style="display:flex;gap:14px;font-size:.72rem;color:var(--tm);margin-bottom:6px;"><span>'+dot('G')+'on track</span><span>'+dot('Y')+'watch</span><span>'+dot('R')+'over</span></div>';
- var monEl=new Date().getMonth()+1;
- DATA.budget.forEach(function(c){
-  var tag={flex:'flexible',fixed:'fixed',save:'savings',her:'allowance'}[c.type];
-  if(c.type==='flex'&&c.essential)tag='utilities';
-  var hcv,txt;
-  if(c.type==='save'){var aside=per==='year'?c.mo*monEl:c.mo;hcv='G';txt=money(aside)+' set aside '+(per==='month'?'this month':'so far')+' · on schedule';}
-  else if(c.type==='fixed'){var al=per==='year'?c.mo*monEl:c.mo;var fsp=per==='year'?(c.yr_spent||al):c.mo;hcv='G';txt=money(fsp)+' of '+money(al)+' · committed';}
-  else{var sp,al;if(per==='year'){sp=c.yr_spent||0;al=c.mo*monEl;}else{sp=c.mo_spent||0;al=c.mo;}var pct=al>0?sp/al:0;hcv=sp>al?'R':(pct>=0.75?'Y':'G');var tail=sp>al?' · OVER'+(per==='year'?' pace':'')+' by '+money(sp-al):' · '+money(Math.max(0,al-sp))+(per==='year'?' under pace':' left');txt=money(sp)+' of '+money(al)+(per==='year'?' allocated so far':' this month')+tail;}
-  h+='<div class="row"><span>'+dot(hcv)+c.name+'<div class="note" style="margin-left:16px;color:'+(hcv==='R'?'var(--r)':'var(--tm)')+'">'+txt+'</div></span><span class="chip">'+tag+'</span></div>';
- });
+ function line(c){
+  var hcv,txt,tag;
+  if(c.type==='flow'){var sp=per==='year'?(c.yr_spent||0):(c.mo_spent||0);var al=per==='year'?c.mo*monEl:(c.avail||c.mo);var pct=al>0?sp/al:0;hcv=sp>al?'R':(pct>=0.75?'Y':'G');tag=c.essential?'utilities':'flexible';var carry=(per==='month'&&c.carry)?' (incl '+money(c.carry)+' carried)':'';var tail=sp>al?' · OVER by '+money(sp-al):' · '+money(Math.max(0,al-sp))+' left';txt=money(sp)+' of '+money(al)+carry+(per==='year'?' pace':' this month')+tail;}
+  else if(c.type==='fixed'){var al=per==='year'?c.mo*monEl:c.mo;hcv='G';tag='fixed';txt=(c.paid?'paid ':'due ')+money(al)+(c.note?' · '+c.note:'')+' · committed';}
+  else if(c.type==='alloc'){var al=per==='year'?(c.yr_spent!=null?c.yr_spent:c.mo*monEl):(c.mo_spent||c.mo);hcv=c.paid?'G':'Y';tag='allocation';txt=(c.paid?'sent ':'pending ')+money(al)+(c.note?' · '+c.note:'');}
+  else{var aside=per==='year'?c.mo*monEl:c.mo;hcv='G';tag='reserve';txt=money(aside)+' set aside '+(per==='month'?'this month':'so far');}
+  return '<div class="row"><span>'+dot(hcv)+c.name+'<div class="note" style="margin-left:16px;color:'+(hcv==='R'?'var(--r)':'var(--tm)')+'">'+txt+'</div></span><span class="chip">'+tag+'</span></div>';
+ }
+ h+=hd('Discretionary (day-to-day)');flow.forEach(function(c){h+=line(c);});
+ h+=hd('Committed this month');B.filter(function(c){return c.type==='fixed'||c.type==='alloc';}).forEach(function(c){h+=line(c);});
+ h+=hd('Reserves building up');B.filter(function(c){return c.type==='sink';}).forEach(function(c){h+=line(c);});
  h+=hd('Last 10 expenses');
  DATA.last10.forEach(function(e){h+='<div class="row" style="padding:6px 0"><span class="note">'+e.date+' · '+e.memo+'</span><span class="amt">'+money(e.thb/FX())+'</span></div>';});
  return h;
