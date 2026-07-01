@@ -165,7 +165,7 @@ function ov(){
 /* ================= BUDGET ================= */
 function setPer(p){per=p;render();}
 function budg(){
- var flex=DATA.budget.filter(function(c){return c.type==='flex';});
+ var flex=DATA.budget.filter(function(c){return c.type==='flex'&&!c.essential;});
  var flexBud=flex.reduce(function(s,c){return s+c.mo;},0), flexSpent=flex.reduce(function(s,c){return s+(c.mo_spent||0);},0);
  var fixed=DATA.budget.filter(function(c){return c.type==='fixed';}).reduce(function(s,c){return s+c.mo;},0);
  var save=DATA.budget.filter(function(c){return c.type==='save';}).reduce(function(s,c){return s+c.mo;},0);
@@ -175,18 +175,20 @@ function budg(){
  h+=feat('Discretionary left this month',money(left),money(flexSpent)+' spent of '+money(flexBud)+' flexible',lcol);
  h+='<div class="stats">';
  h+=stat('Biggest overage',over?('−'+money(over.mo_spent-over.mo)):'none',over?over.name:'all flex on track',over?'var(--r)':'var(--g)');
- h+=stat('Fixed bills',money(fixed),'rent, cars, utilities','var(--tp)');
+ h+=stat('Fixed bills',money(fixed),'cars, phone, internet','var(--tp)');
  h+=stat('Saving set aside',money(save),'taxes, travel, insurance','var(--tp)');
  h+=stat('Punnada allowance',money((DATA.budget.find(function(c){return c.type==='her';})||{}).mo||0),'monthly','var(--tp)');
  h+='</div></div>';
  h+='<div class="seg" style="margin-bottom:.8rem;"><button class="'+(per==='month'?'on':'')+'" style="flex:1;padding:9px" onclick="setPer(\'month\')">THIS MONTH</button><button class="'+(per==='year'?'on':'')+'" style="flex:1;padding:9px" onclick="setPer(\'year\')">WHOLE YEAR</button></div>';
  h+='<div style="display:flex;gap:14px;font-size:.72rem;color:var(--tm);margin-bottom:6px;"><span>'+dot('G')+'on track</span><span>'+dot('Y')+'watch</span><span>'+dot('R')+'over</span></div>';
- var el=per==='year'?(182/365):(new Date().getDate()/30);
+ var monEl=new Date().getMonth()+1;
  DATA.budget.forEach(function(c){
-  var bud=per==='year'?c.mo*12:c.mo, tag={flex:'flexible',fixed:'fixed',save:'savings',her:'allowance'}[c.type];
+  var tag={flex:'flexible',fixed:'fixed',save:'savings',her:'allowance'}[c.type];
+  if(c.type==='flex'&&c.essential)tag='utilities';
   var hcv,txt;
-  if(c.type==='save'){var aside=per==='year'?c.mo*6:c.mo;hcv='G';txt=money(aside)+' set aside '+(per==='month'?'this month':'so far')+' · on schedule';}
-  else{var sp=per==='year'?c.yr_spent:c.mo_spent;var pct=bud>0?sp/bud:0;hcv=pct>1?'R':(pct>el+0.05?'Y':'G');txt=money(sp)+' of '+money(bud)+(pct>1?' · OVER by '+money(sp-bud):' · '+money(bud-sp)+' left');}
+  if(c.type==='save'){var aside=per==='year'?c.mo*monEl:c.mo;hcv='G';txt=money(aside)+' set aside '+(per==='month'?'this month':'so far')+' · on schedule';}
+  else if(c.type==='fixed'){var al=per==='year'?c.mo*monEl:c.mo;var fsp=per==='year'?(c.yr_spent||al):c.mo;hcv='G';txt=money(fsp)+' of '+money(al)+' · committed';}
+  else{var sp,al;if(per==='year'){sp=c.yr_spent||0;al=c.mo*monEl;}else{sp=c.mo_spent||0;al=c.mo;}var pct=al>0?sp/al:0;hcv=sp>al?'R':(pct>=0.75?'Y':'G');var tail=sp>al?' · OVER'+(per==='year'?' pace':'')+' by '+money(sp-al):' · '+money(Math.max(0,al-sp))+(per==='year'?' under pace':' left');txt=money(sp)+' of '+money(al)+(per==='year'?' allocated so far':' this month')+tail;}
   h+='<div class="row"><span>'+dot(hcv)+c.name+'<div class="note" style="margin-left:16px;color:'+(hcv==='R'?'var(--r)':'var(--tm)')+'">'+txt+'</div></span><span class="chip">'+tag+'</span></div>';
  });
  h+=hd('Last 10 expenses');
