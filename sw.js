@@ -2,7 +2,7 @@
 // Shell (index.html / navigations) + data (.enc): NETWORK-FIRST — always the
 // latest when online, cached fallback when offline. So a UI edit just needs a
 // push + reopen; no version bump required. Icons/manifest: cache-first.
-const C = 'money-v2';
+const C = 'money-v3';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
   './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png'

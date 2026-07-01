@@ -115,7 +115,37 @@ function cycleScale(){var s=parseFloat(getComputedStyle(document.documentElement
 function drawNav(){document.getElementById('nav').innerHTML=tabs.map(t=>'<button class="'+(tab===t[0]?'on':'')+'" onclick="setTab(\''+t[0]+'\')">'+t[1]+'</button>').join('');}
 
 /* ---- data hooks ---- */
-function __apply(obj){try{if(typeof obj==='string')obj=JSON.parse(obj);if(obj&&obj.budget){DATA=obj;var el=document.getElementById('live');if(el)el.textContent='updated '+(DATA.as_of||'');drawNav();render();return true;}}catch(e){}return false;}
+/* Freshness status distinguishes four things so an out-of-sync app can be traced:
+   (a) when the Mac pipeline last BUILT the data (meta.generated_at),
+   (b) whether that build brought FRESH numbers or re-published unchanged data (meta.data_changed),
+   (c) a broken source feed (meta.stale_sources), and
+   (d) when THIS phone last pulled the file (FETCHED_AT). */
+let FETCHED_AT=0;
+function relAge(t){if(!t)return'—';t=(typeof t==='number')?t:Date.parse(t);if(isNaN(t))return'—';var s=Math.max(0,(Date.now()-t)/1000);if(s<90)return'just now';var m=Math.round(s/60);if(m<60)return m+'m ago';var h=Math.floor(m/60),mm=m%60;if(h<24)return h+'h'+((mm&&h<6)?' '+mm+'m':'')+' ago';return Math.floor(h/24)+'d ago';}
+function clockOf(t){if(!t)return'—';t=Date.parse(t);if(isNaN(t))return'—';return new Date(t).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});}
+function renderStatus(){
+  var el=document.getElementById('live');if(!el)return;
+  var m=(DATA&&DATA.meta)||{}, gen=m.generated_at||DATA.as_of;
+  var gh=Date.parse(gen); gh=isNaN(gh)?null:(Date.now()-gh)/3600000;
+  var stale=m.stale_sources||[], col, txt;
+  if(stale.length){col='var(--r)';txt='⚠ '+stale.join(', ')+' feed stale';}
+  else if(gh!=null&&gh>8){col='var(--r)';txt='⚠ not updating · built '+relAge(gen);}
+  else if(m.data_changed===false){col='var(--y)';txt='● no new data · built '+relAge(gen);}
+  else{col='var(--g)';txt='● fresh · built '+relAge(gen);}
+  el.innerHTML='<span style="color:'+col+'">'+txt+'</span>';
+  el.style.cursor='pointer';
+  el.onclick=function(){var m=(DATA&&DATA.meta)||{};
+    alert('Data freshness\n\n'+
+      'Built on Mac:   '+clockOf(m.generated_at||DATA.as_of)+'  ('+relAge(m.generated_at||DATA.as_of)+')\n'+
+      'Data changed:   '+(m.data_changed?'yes — fresh this build':'no — identical to prior build')+'\n'+
+      'Last changed:   '+clockOf(m.data_changed_at)+'\n'+
+      'This phone pulled: '+relAge(FETCHED_AT)+'\n'+
+      (stale.length?'⚠ Broken feed(s): '+stale.join(', ')+'\n':'Feeds: all ok\n')+
+      (m.cockpit_updated_at?'Cockpit stamp:  '+clockOf(m.cockpit_updated_at)+'\n':'')+
+      '\nWhere to look if numbers look old:\n• "built" is old → Mac pipeline/launchd stopped.\n• built recent but "last changed" old → a feed is re-baking stale data.\n• both recent but this shows old → tap ⟳ to re-pull on this phone.');
+  };
+}
+function __apply(obj){try{if(typeof obj==='string')obj=JSON.parse(obj);if(obj&&obj.budget){DATA=obj;FETCHED_AT=Date.now();drawNav();render();renderStatus();return true;}}catch(e){}return false;}
 window.__applyFromNative=function(obj){return __apply(obj);};
 /* ---- client-side decryption ---- */
 const PASS_KEY='moneyPass';
@@ -249,6 +279,13 @@ drawNav();render();
 if(window.__NATIVE_INJECT__){/* native app injects via __applyFromNative */}
 else{bootEncrypted();}
 if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});}
+/* keep "built Xm ago" counting so a frozen (never re-pulling) app reveals itself */
+setInterval(renderStatus,60000);
+/* iOS home-screen PWAs resume without reloading — auto re-pull when foregrounded (if
+   unlocked and the current data is >60s old) so reopening the app shows current numbers */
+function maybeAutoRefresh(){if(document.hidden)return;if(Date.now()-FETCHED_AT<60000)return;var s=null;try{s=localStorage.getItem(PASS_KEY);}catch(e){}if(s)refreshData();}
+document.addEventListener('visibilitychange',maybeAutoRefresh);
+window.addEventListener('focus',maybeAutoRefresh);
 </script>
 </body>
 </html>
